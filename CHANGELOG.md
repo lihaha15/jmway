@@ -2,7 +2,33 @@
 
 每个版本的 APK 都附 SHA-256，下载后可以自己核对（手机上的文件管理器、电脑上的 `sha256sum` 都行）。
 
-## 1.1.2 — 2026-11-13
+## 1.1.3 — 2026-11-14
+
+新增应用内检查更新，并撤销 1.1.2 的混合内容改动。
+
+- **撤销 1.1.2 的 `setMixedContentMode(2)`**：真机实测这一改动会让漫画图片全部无法显示，改回原来的 `0`（全部允许）。这一项以后不再动。
+- 首页新增「检查更新」按钮：请求 GitHub 的 `releases/latest` 接口比对版本，有新版本弹出提示卡片
+- 应用内下载：走系统 `DownloadManager`，文件存到 `Download/` 目录，下载完点通知栏安装
+- Android 8 及以上会先检查「允许安装未知应用」，没开会引导到系统设置页
+- 首页右上角版本号改为读取真实 `versionName`（以前写死 `V 1.0`）
+- manifest 新增 `REQUEST_INSTALL_PACKAGES` 权限（Android 8 起安装 APK 必需）
+
+| 项 | 值 |
+|---|---|
+| 文件 | `JMway-1.1.3.apk` |
+| 大小 | 3,672,386 字节 |
+| SHA-256 | `075276b935c53c3ef5e4664919cdab4bdcd8c3e66c97ccfddca2f633bdf352e0` |
+| versionName / versionCode | 1.1.3 / 101005 |
+
+> versionCode 比 1.1.2 多跳了两号（101003 → 101005），是因为测试更新流程时中间打过一个
+> `versionName=1.1.2 / versionCode=101004` 的测试包，正式包必须比它高才能覆盖安装。
+
+新增的原生方法（`source/smali/top/webcat/myapp/utils/MyJavascriptInterface.smali`）：
+
+- `getVersionName()`：读 `PackageManager` 的 `versionName`，供前端显示和版本比对
+- `downloadApk(url, fileName)`：删同名旧文件 → `DownloadManager.enqueue` → Toast 提示
+
+## 1.1.2 — 2026-11-13（已回滚）
 
 混合内容策略收紧，其它不变。
 

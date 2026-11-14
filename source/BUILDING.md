@@ -13,15 +13,22 @@
 
 | 类 / 文件 | 改动 | 版本 |
 |---|---|---|
-| `FirstFragment.smali` | WebView 设置：UA 改成桌面版 Chrome、混合内容 0→2 | 1.1.2 |
+| `FirstFragment.smali` | WebView 设置：UA 改成桌面版 Chrome | 1.1.0 之前 |
 | `FirstFragment$1.smali` | `onReceivedSslError` 显式 `cancel()` + 日志 | 1.1.1 |
 | `FirstFragment$3.smali` | `onProgressChanged` 到 10% 时注入 `perf.js` | 1.1.0 之前 |
-| `JmDownloader.smali` | 下载器 WebView：混合内容 0→2 | 1.1.2 |
+| `JmDownloader.smali` | 下载器 WebView 初始化 | 1.1.0 之前 |
 | `JmDownloader$1.smali` | 同上，`onReceivedSslError` 显式拒绝 | 1.1.1 |
 | `JmZipPacker.smali` | 下载完打 zip、清临时图片 | 1.1.0 之前 |
 | `assets/webcat/script.js` | 线路列表只收 https | 1.1.1 |
 | `assets/webcat/downloader.html` | 下载请求强制 https | 1.1.1 |
 | `assets/webcat/perf.js` | 预连接、图片优先级、提前去广告 | 1.1.0 之前 |
+| `MyJavascriptInterface.smali` | 新增 `getVersionName()` 和 `downloadApk(url, fileName)` | 1.1.3 |
+| `assets/webcat/update.js` | 检查更新逻辑（新增文件） | 1.1.3 |
+| `assets/webcat/index.html` | 首页加「检查更新」按钮、版本号占位、更新弹窗 | 1.1.3 |
+| `assets/webcat/ui.css` | 按钮 / 弹窗 / Toast 样式 | 1.1.3 |
+
+> 混合内容（`setMixedContentMode`）在 1.1.2 里从 `0` 改成过 `2`，真机实测会让漫画图片全部无法显示，
+> 1.1.3 已改回 `0`，代码里现在就是 `0`。这一项不要再动。
 
 关键片段的含义写在 `CHANGELOG.md` 和每个版本的构建记录里。
 
