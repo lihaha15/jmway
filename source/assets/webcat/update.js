@@ -2,12 +2,18 @@
  * JMway 检查更新
  * 依赖原生接口：webcat.getVersionName() / webcat.downloadApk(url, fileName)
  * 兼容老 WebView（Android 4.4 起），所以用 XMLHttpRequest 而不是 fetch
+ * 国内直连 GitHub 很慢：优先走 GitHub 加速代理，全部失败再回落直连
  * ========================================================== */
 (function () {
   var REPO = 'lihaha15/jmway';
   var API = 'https://api.github.com/repos/' + REPO + '/releases/latest';
-  var TIMEOUT = 16000;
+  /* 加速代理：在原始 GitHub 地址前拼上前缀即可，多个轮流试 */
+  var PROXIES = ['https://gh-proxy.org/', 'https://gh-proxy.com/'];
+  var TIMEOUT = 9000;        // 单个代理请求超时
+  var DIRECT_TIMEOUT = 18000; // 直连兜底超时（国内通常很慢）
+  var PROBE_TIMEOUT = 5000;   // 线路探测超时
   var busy = false;
+  var goodProxy = '';         // 检查更新时确认可用的代理前缀，'' 表示未确认
 
   function $(id) { return document.getElementById(id); }
 
@@ -65,7 +71,7 @@
     t._tid = setTimeout(function () { t.classList.remove('show'); }, 2400);
   }
 
-  function xhrJSON(url, cb) {
+  function xhrJSON(url, timeout, cb) {
     var xhr = new XMLHttpRequest();
     var done = false;
     function finish(err, data) {
@@ -75,7 +81,7 @@
     }
     try {
       xhr.open('GET', url, true);
-      xhr.timeout = TIMEOUT;
+      xhr.timeout = timeout || TIMEOUT;
       xhr.onreadystatechange = function () {
         if (xhr.readyState !== 4) return;
         var s = xhr.status;
@@ -100,14 +106,67 @@
     }
   }
 
+  /* 探测某条线路能否访问到文件（HEAD 请求，只取响应头，不下载内容） */
+  function probe(url, cb) {
+    var xhr = new XMLHttpRequest();
+    var done = false;
+    function fin(ok) {
+      if (done) return;
+      done = true;
+      cb(ok);
+    }
+    try {
+      xhr.open('HEAD', url + (url.indexOf('?') >= 0 ? '&' : '?') + '_=' + new Date().getTime(), true);
+      xhr.timeout = PROBE_TIMEOUT;
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) return;
+        var s = xhr.status;
+        fin(s >= 200 && s < 400);
+      };
+      xhr.ontimeout = function () { fin(false); };
+      xhr.onerror = function () { fin(false); };
+      xhr.send();
+    } catch (e) {
+      fin(false);
+    }
+  }
+
+  /* 依次尝试各条线路取最新版本信息：代理1 → 代理2 → 直连 */
+  function fetchLatest(cb) {
+    var chain = [];
+    for (var i = 0; i < PROXIES.length; i++) {
+      chain.push({ url: PROXIES[i] + API, proxy: PROXIES[i], timeout: TIMEOUT });
+    }
+    chain.push({ url: API, proxy: '', timeout: DIRECT_TIMEOUT });
+
+    var idx = 0;
+    var lastErr = null;
+
+    function next() {
+      if (idx >= chain.length) { cb(lastErr || new Error('网络不通')); return; }
+      var item = chain[idx++];
+      var url = item.url + (item.url.indexOf('?') >= 0 ? '&' : '?') + '_=' + new Date().getTime();
+      xhrJSON(url, item.timeout, function (err, data) {
+        if (!err) {
+          goodProxy = item.proxy;
+          cb(null, data);
+          return;
+        }
+        lastErr = err;
+        next();
+      });
+    }
+    next();
+  }
+
   function check() {
     if (busy) return;
     busy = true;
+    goodProxy = '';
     setBtn('检查中', true, true);
     var cur = currentVersion();
-    var url = API + '?_=' + new Date().getTime();
 
-    xhrJSON(url, function (err, data) {
+    fetchLatest(function (err, data) {
       busy = false;
       if (err) {
         setBtn('检查更新', false, false);
@@ -178,23 +237,16 @@
     mask.classList.remove('show');
   }
 
-  function startDownload() {
+  function launch(finalUrl) {
     var mask = $('update-mask');
-    var url = mask && mask._url;
-    var name = mask && mask._name;
-    if (!url) return;
-
     var go = $('update-go');
-    if (go) { go.disabled = true; go.textContent = '正在下载…'; }
-
     var ok = false;
     try {
-      if (window.webcat && window.webcat.downloadApk) {
-        window.webcat.downloadApk(url, name);
+      if (mask && mask._name && window.webcat && window.webcat.downloadApk) {
+        window.webcat.downloadApk(finalUrl, mask._name);
         ok = true;
       }
     } catch (e) {}
-
     setTimeout(function () {
       if (go) { go.disabled = false; go.textContent = '立即更新'; }
       if (ok) {
@@ -203,6 +255,32 @@
         toast('当前环境不支持直接下载，请到 GitHub 手动下载');
       }
     }, 800);
+  }
+
+  function startDownload() {
+    var mask = $('update-mask');
+    var url = mask && mask._url;
+    if (!url) return;
+
+    var go = $('update-go');
+    if (go) { go.disabled = true; go.textContent = '准备下载…'; }
+
+    /* 检查更新时确认过代理可用就直接用，省一次探测 */
+    if (goodProxy) {
+      launch(goodProxy + url);
+      return;
+    }
+
+    var i = 0;
+    (function tryNext() {
+      if (i >= PROXIES.length) { launch(url); return; }
+      var p = PROXIES[i++];
+      if (go) go.textContent = i === 1 ? '正在连接…' : '换个通道…';
+      probe(p + url, function (ok) {
+        if (ok) launch(p + url);
+        else tryNext();
+      });
+    })();
   }
 
   function boot() {
